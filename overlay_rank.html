@@ -26,19 +26,10 @@ html, body {
   letter-spacing:0.12em; text-transform:uppercase; color:var(--blue);
 }
 .body { padding:16px; }
-.rank-tier {
-  font-size:11px; font-weight:700; color:var(--muted);
-  letter-spacing:0.1em; text-transform:uppercase; margin-bottom:2px;
-}
-.rank-value {
-  font-size:22px; font-weight:800; color:var(--light); margin-bottom:2px;
-}
-.rank-lp {
-  font-size:13px; font-weight:600; color:var(--blue); margin-bottom:16px;
-}
-.wr-row {
-  display:flex; gap:12px; margin-bottom:20px;
-}
+.rank-tier { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:2px; }
+.rank-value { font-size:22px; font-weight:800; color:var(--light); margin-bottom:2px; }
+.rank-lp { font-size:13px; font-weight:600; color:var(--blue); margin-bottom:16px; }
+.wr-row { display:flex; gap:12px; margin-bottom:20px; }
 .wr-box {
   background:rgba(45,107,228,0.08);
   border:1px solid rgba(45,107,228,0.2);
@@ -51,16 +42,11 @@ html, body {
 .obj-label { font-size:9px; color:var(--muted); font-weight:600; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
 .obj-title { font-size:18px; font-weight:700; color:var(--light); }
 .obj-lp    { font-size:24px; font-weight:800; color:var(--blue); margin-bottom:14px; }
-.prog-track {
-  width:100%; height:8px;
-  background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:6px;
-}
-.prog-fill { height:100%; background:var(--blue); border-radius:4px; transition:width 0.5s; }
+.prog-track { width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; margin-bottom:6px; }
+.prog-fill  { height:100%; background:var(--blue); border-radius:4px; transition:width 0.5s; }
 .prog-labels { display:flex; justify-content:space-between; font-size:9px; }
 .prog-cur { color:var(--light); font-weight:600; }
 .prog-tgt { color:var(--muted); }
-.error { color:var(--red); font-size:11px; padding:8px; }
-.loading { color:var(--muted); font-size:11px; padding:8px; }
 </style>
 </head>
 <body>
@@ -70,26 +56,14 @@ html, body {
   <div class="rank-value" id="rank">---</div>
   <div class="rank-lp" id="lp">-- LP</div>
   <div class="wr-row">
-    <div class="wr-box">
-      <div class="wr-label">Victoires</div>
-      <div class="wr-val wr-green" id="wins">--</div>
-    </div>
-    <div class="wr-box">
-      <div class="wr-label">Défaites</div>
-      <div class="wr-val wr-blue" id="losses">--</div>
-    </div>
-    <div class="wr-box">
-      <div class="wr-label">Win Rate</div>
-      <div class="wr-val wr-green" id="wr">--%</div>
-    </div>
+    <div class="wr-box"><div class="wr-label">Victoires</div><div class="wr-val wr-green" id="wins">--</div></div>
+    <div class="wr-box"><div class="wr-label">Défaites</div><div class="wr-val wr-blue" id="losses">--</div></div>
+    <div class="wr-box"><div class="wr-label">Win Rate</div><div class="wr-val wr-green" id="wr">--%</div></div>
   </div>
   <div class="obj-label">Objectif</div>
   <div class="obj-title">Road to Master</div>
-  <!-- === MODIFIE LP CIBLE ICI === -->
   <div class="obj-lp">600 LP</div>
-  <div class="prog-track">
-    <div class="prog-fill" id="prog-fill" style="width:0%"></div>
-  </div>
+  <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
   <div class="prog-labels">
     <span class="prog-cur" id="prog-cur">-- LP</span>
     <span class="prog-tgt">Master 600 LP</span>
@@ -98,17 +72,16 @@ html, body {
 
 <script>
 // === MODIFIE CES VALEURS ===
-const API_KEY    = 'RGAPI-4a182b27-d108-461b-9ba7-7dd9643b28e8';
-const GAME_NAME  = 'Azakana';
-const TAG_LINE   = 'Yone2';
-const REGION     = 'euw1';
-const CLUSTER    = 'europe';
-const TARGET_LP  = 600; // LP cible Master
+const API_KEY   = 'RGAPI-4a182b27-d108-461b-9ba7-7dd9643b28e8';
+const GAME_NAME = 'Azakana';
+const TAG_LINE  = 'YONE2';
+const CLUSTER   = 'europe';
+const REGION    = 'euw1';
+const TARGET_LP = 600;
 
-const TIER_ORDER = {
-  'IRON':0,'BRONZE':1,'SILVER':2,'GOLD':3,'PLATINUM':4,
-  'EMERALD':5,'DIAMOND':6,'MASTER':7,'GRANDMASTER':8,'CHALLENGER':9
-};
+// Refresh toutes les 5 minutes pour limiter les appels
+const REFRESH_MS = 5 * 60 * 1000;
+
 const TIER_LP = {
   'IRON':0,'BRONZE':400,'SILVER':800,'GOLD':1200,'PLATINUM':1600,
   'EMERALD':2000,'DIAMOND':2400,'MASTER':2800
@@ -116,52 +89,44 @@ const TIER_LP = {
 const RANK_LP = {'IV':0,'III':100,'II':200,'I':300};
 
 function totalLP(tier, rank, lp) {
-  const base = TIER_LP[tier] ?? 2800;
-  const rankLP = RANK_LP[rank] ?? 0;
-  return base + rankLP + lp;
+  return (TIER_LP[tier] ?? 2800) + (RANK_LP[rank] ?? 0) + lp;
 }
 
 async function fetchData() {
   try {
-    // 1. PUUID
+    // 1. PUUID via account-v1
     const accRes = await fetch(
       `https://${CLUSTER}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${GAME_NAME}/${TAG_LINE}`,
       { headers: { 'X-Riot-Token': API_KEY } }
     );
-    if (!accRes.ok) throw new Error('Account not found');
+    if (!accRes.ok) throw new Error('Account ' + accRes.status);
     const acc = await accRes.json();
+    const puuid = acc.puuid;
 
-    // 2. Summoner ID
-    const sumRes = await fetch(
-      `https://${REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${acc.puuid}`,
-      { headers: { 'X-Riot-Token': API_KEY } }
-    );
-    const sum = await sumRes.json();
-
-    // 3. Ranked data
+    // 2. Ranked data via entries/by-puuid (pas besoin de summoner ID)
     const rankRes = await fetch(
-      `https://${REGION}.api.riotgames.com/lol/league/v4/entries/by-summoner/${sum.id}`,
+      `https://${REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`,
       { headers: { 'X-Riot-Token': API_KEY } }
     );
+    if (!rankRes.ok) throw new Error('Rank ' + rankRes.status);
     const ranks = await rankRes.json();
     const solo = ranks.find(r => r.queueType === 'RANKED_SOLO_5x5');
 
     if (solo) {
-      const tier = solo.tier;
-      const rank = solo.rank;
-      const lp   = solo.leaguePoints;
-      const wins = solo.wins;
+      const tier   = solo.tier;
+      const rank   = solo.rank;
+      const lp     = solo.leaguePoints;
+      const wins   = solo.wins;
       const losses = solo.losses;
-      const wrPct = Math.round(wins / (wins + losses) * 100);
+      const wrPct  = Math.round(wins / (wins + losses) * 100);
 
-      document.getElementById('tier').textContent = 'Solo/Duo';
-      document.getElementById('rank').textContent = tier.charAt(0) + tier.slice(1).toLowerCase() + ' ' + rank;
-      document.getElementById('lp').textContent = lp + ' LP';
-      document.getElementById('wins').textContent = wins;
-      document.getElementById('losses').textContent = losses;
-      document.getElementById('wr').textContent = wrPct + '%';
+      document.getElementById('tier').textContent    = 'Solo/Duo';
+      document.getElementById('rank').textContent    = tier.charAt(0) + tier.slice(1).toLowerCase() + ' ' + rank;
+      document.getElementById('lp').textContent      = lp + ' LP';
+      document.getElementById('wins').textContent    = wins;
+      document.getElementById('losses').textContent  = losses;
+      document.getElementById('wr').textContent      = wrPct + '%';
 
-      // Progression vers Master 600 LP
       const currentTotal = totalLP(tier, rank, lp);
       const targetTotal  = totalLP('MASTER', 'I', TARGET_LP);
       const startTotal   = totalLP('DIAMOND', 'IV', 0);
@@ -169,19 +134,18 @@ async function fetchData() {
         Math.round((currentTotal - startTotal) / (targetTotal - startTotal) * 100)
       ));
       document.getElementById('prog-fill').style.width = pct + '%';
-      document.getElementById('prog-cur').textContent = lp + ' LP (' + pct + '%)';
+      document.getElementById('prog-cur').textContent  = lp + ' LP (' + pct + '%)';
     } else {
       document.getElementById('tier').textContent = 'Non classé';
     }
   } catch(e) {
-    document.getElementById('tier').textContent = 'Erreur API';
+    document.getElementById('tier').textContent = 'Erreur: ' + e.message;
     console.error(e);
   }
 }
 
 fetchData();
-// Refresh toutes les 3 minutes
-setInterval(fetchData, 3 * 60 * 1000);
+setInterval(fetchData, REFRESH_MS);
 </script>
 </body>
 </html>
