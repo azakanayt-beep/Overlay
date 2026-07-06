@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>AzakanaGG — Games</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:876px; height:470px;
+  background:rgba(8,12,18,0.92);
+  font-family:'Inter',sans-serif;
+  overflow:hidden;
+  border:1px solid #1E3A5F;
+  border-radius:6px;
+}
+:root {
+  --blue:#2D6BE4; --light:#6FAAFF;
+  --border:#1E3A5F; --muted:#7D8590;
+  --green:#3FB950; --red:#F85149;
+}
+.ph {
+  background:rgba(45,107,228,0.13);
+  border-bottom:1px solid var(--border);
+  padding:7px 12px; font-size:9px; font-weight:700;
+  letter-spacing:0.12em; text-transform:uppercase; color:var(--blue);
+  display:flex; align-items:center; gap:8px; height:32px;
+}
+.refresh-btn {
+  margin-left:auto; cursor:pointer;
+  background:rgba(45,107,228,0.2);
+  border:1px solid rgba(45,107,228,0.4);
+  color:var(--light); font-size:8px; font-weight:700;
+  padding:2px 8px; border-radius:3px; letter-spacing:0.08em;
+  font-family:'Inter',sans-serif;
+}
+.games-grid {
+  display:grid;
+  grid-template-columns:repeat(5, 1fr);
+  gap:6px;
+  padding:8px;
+  height:calc(100% - 32px);
+}
+.game-card {
+  border-radius:6px;
+  overflow:hidden;
+  display:flex; flex-direction:column;
+  border:1px solid var(--border);
+}
+.game-card.win  { border-color:rgba(63,185,80,0.45); background:rgba(63,185,80,0.07); }
+.game-card.loss { border-color:rgba(248,81,73,0.45); background:rgba(248,81,73,0.07); }
+.game-top {
+  padding:5px 6px; font-size:8px; font-weight:800;
+  text-align:center; letter-spacing:0.1em; text-transform:uppercase; flex-shrink:0;
+}
+.game-top.win  { background:rgba(63,185,80,0.22); color:#3FB950; }
+.game-top.loss { background:rgba(248,81,73,0.22); color:#F85149; }
+.game-body {
+  padding:8px 6px; flex:1;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:5px;
+}
+.champ-icon {
+  width:52px; height:52px; border-radius:50%;
+  object-fit:cover; border:2px solid rgba(45,107,228,0.5);
+  background:#0d1520;
+}
+.champ-name { font-size:11px; font-weight:700; color:#E6EDF3; text-align:center; }
+.kda { font-size:14px; font-weight:800; color:var(--light); text-align:center; }
+.kda-ratio { font-size:9px; color:var(--muted); text-align:center; }
+.cs-dur { font-size:9px; color:var(--muted); text-align:center; }
+.loading { color:var(--muted); font-size:11px; padding:16px; text-align:center; grid-column:1/-1; align-self:center; }
+.error   { color:#F85149; font-size:11px; padding:16px; text-align:center; grid-column:1/-1; align-self:center; }
+</style>
+</head>
+<body>
+<div class="ph">
+  DERNIÈRES GAMES
+  <button class="refresh-btn" onclick="fetchGames()">↻ REFRESH</button>
+</div>
+<div class="games-grid" id="grid">
+  <div class="loading">Chargement des games...</div>
+</div>
+
+<script>
+const API_KEY   = 'RGAPI-4a182b27-d108-461b-9ba7-7dd9643b28e8';
+const GAME_NAME = 'Azakana';
+const TAG_LINE  = 'Yone2';
+const CLUSTER   = 'europe';
+const NB_GAMES  = 5;
+
+let puuidCache = null;
+
+async function getPuuid() {
+  if (puuidCache) return puuidCache;
+  const res = await fetch(
+    `https://${CLUSTER}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${GAME_NAME}/${TAG_LINE}`,
+    { headers: { 'X-Riot-Token': API_KEY } }
+  );
+  const acc = await res.json();
+  puuidCache = acc.puuid;
+  return puuidCache;
+}
+
+async function getVersion() {
+  const res = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
+  const v = await res.json();
+  return v[0];
+}
+
+function kdaRatio(k, d, a) {
+  if (d === 0) return 'Perfect';
+  return ((k + a) / d).toFixed(2) + ' KDA';
+}
+
+function formatDur(sec) {
+  const m = Math.floor(sec/60);
+  const s = sec % 60;
+  return m + 'm' + String(s).padStart(2,'0') + 's';
+}
+
+async function fetchGames() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div class="loading">Chargement...</div>';
+  try {
+    const [puuid, version] = await Promise.all([getPuuid(), getVersion()]);
+
+    const matchRes = await fetch(
+      `https://${CLUSTER}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&start=0&count=${NB_GAMES}`,
+      { headers: { 'X-Riot-Token': API_KEY } }
+    );
+    const matchIds = await matchRes.json();
+
+    if (!matchIds.length) {
+      grid.innerHTML = '<div class="loading">Aucune game ranked trouvée</div>';
+      return;
+    }
+
+    const matchDetails = await Promise.all(
+      matchIds.map(id =>
+        fetch(`https://${CLUSTER}.api.riotgames.com/lol/match/v5/matches/${id}`,
+          { headers: { 'X-Riot-Token': API_KEY } }
+        ).then(r => r.json())
+      )
+    );
+
+    grid.innerHTML = '';
+
+    matchDetails.forEach(match => {
+      const p = match.info.participants.find(x => x.puuid === puuid);
+      if (!p) return;
+      const win  = p.win;
+      const champ = p.championName;
+      const k = p.kills, d = p.deaths, a = p.assists;
+      const cs  = p.totalMinionsKilled + p.neutralMinionsKilled;
+      const dur = match.info.gameDuration;
+      const icon = `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champ}.png`;
+
+      const card = document.createElement('div');
+      card.className = `game-card ${win ? 'win' : 'loss'}`;
+      card.innerHTML = `
+        <div class="game-top ${win ? 'win' : 'loss'}">${win ? 'VICTOIRE' : 'DÉFAITE'}</div>
+        <div class="game-body">
+          <img class="champ-icon" src="${icon}" alt="${champ}" onerror="this.style.display='none'">
+          <div class="champ-name">${champ}</div>
+          <div class="kda">${k}/${d}/${a}</div>
+          <div class="kda-ratio">${kdaRatio(k,d,a)}</div>
+          <div class="cs-dur">${cs} CS · ${formatDur(dur)}</div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+  } catch(e) {
+    grid.innerHTML = `<div class="error">Erreur: ${e.message}</div>`;
+  }
+}
+
+fetchGames();
+setInterval(fetchGames, 5 * 60 * 1000);
+</script>
+</body>
+</html>
